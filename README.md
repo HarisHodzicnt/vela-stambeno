@@ -1,6 +1,10 @@
-# stambeno.ba - Real Estate Marketplace
+# 🏠 Property Rental Platform MVP
 
-Complete real estate platform for Bosnia & Herzegovina with rental and sales capabilities.
+A modern, full-stack property rental marketplace template with clean UI/UX design.
+
+**Perfect for**: Property rentals, vacation bookings, real estate listings, or any marketplace application.
+
+> 🤖 **For AI Assistants**: See [`AI_REBRANDING_GUIDE.md`](./AI_REBRANDING_GUIDE.md) for comprehensive instructions on how to adapt this MVP to other use cases.
 
 ## 🏗️ Architecture
 
@@ -12,15 +16,43 @@ Complete real estate platform for Bosnia & Herzegovina with rental and sales cap
 - **Storage**: S3-compatible (AWS/CloudFlare R2)
 - **Payments**: Stripe
 
+## ✨ Features
+
+### User Features
+- 🔐 **Authentication** - JWT-based login/register with auth guards
+- 🏠 **Property Listings** - Browse, search, and filter properties
+- 📝 **Property Management** - Full CRUD for property owners
+- 🖼️ **Image Upload** - Multi-image upload with previews
+- 📱 **Responsive Design** - Mobile-first, works on all devices
+- 💳 **Booking System** - Reserve properties with date selection
+- 👤 **User Dashboard** - Manage properties, bookings, and profile
+
+### Design Features
+- 🎨 **Modern UI** - Clean, card-based design with hover effects
+- 🎭 **Smooth Animations** - 200-300ms transitions throughout
+- 📊 **Grid Layouts** - Responsive auto-fill grids
+- 🔄 **Loading States** - Spinners and skeletons
+- 📭 **Empty States** - Helpful messaging when no data
+- 🎯 **Status Badges** - Visual indicators (DRAFT, ACTIVE, SOLD)
+
+### Technical Features
+- 🔒 **JWT Authentication** - Secure token-based auth
+- 🛣️ **Route Guards** - Protected routes and ownership checks
+- 📡 **API Integration** - Axios with request/response interceptors
+- 🗃️ **State Management** - Pinia stores for auth and data
+- 📝 **TypeScript** - Full type safety in frontend
+- 🎪 **Multi-step Forms** - Wizard pattern for complex workflows
+
 ## 📁 Project Structure
 
 ```
 stambeno.ba/
-├── backend/           # Symfony API
-├── web/              # Vue.js web app
-├── mobile/           # Flutter mobile app
-├── docs/             # Complete documentation
-└── docker-compose.yml
+├── backend/              # Symfony API + API Platform
+├── web/                  # Vue.js web application
+├── mobile/               # Flutter mobile app (basic setup)
+├── docker-compose.yml    # Docker services
+├── START.sh              # Quick start script
+└── AI_REBRANDING_GUIDE.md # Guide for AI-assisted rebranding
 ```
 
 ## 🚀 Quick Start
