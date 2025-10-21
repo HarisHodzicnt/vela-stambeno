@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: stambeno_postgres
+    environment:
+      POSTGRES_DB: stambeno_db
+      POSTGRES_USER: stambeno
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - stambeno_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: stambeno_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - stambeno_network
+
+  # MailHog (Email testing)
+  mailhog:
+    image: mailhog/mailhog
+    container_name: stambeno_mailhog
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI
+    networks:
+      - stambeno_network
+
+  # Backend and Frontend run locally, not in Docker
+  # Use: symfony server:start (backend) and npm run dev (frontend)
+
+volumes:
+  postgres_data:
+  symfony_var:
+
+networks:
+  stambeno_network:
+    driver: bridge

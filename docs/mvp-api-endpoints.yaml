@@ -1,0 +1,119 @@
+# API Endpoints Specification - stambeno.ba MVP
+
+version: "1.0"
+base_url: "/api/v1"
+auth: "JWT Bearer Token"
+
+# AUTHENTICATION
+auth:
+  POST /auth/register: { body: [email, password, first_name, last_name, phone, date_of_birth, is_owner], returns: "user + token" }
+  POST /auth/login: { body: [email, password], returns: "user + token" }
+  POST /auth/logout: { auth: true }
+  POST /auth/refresh: { auth: true, returns: "new token" }
+  POST /auth/password/reset-request: { body: [email] }
+  POST /auth/password/reset: { body: [token, new_password] }
+
+# USER PROFILE
+users:
+  GET /users/me: { auth: true, returns: "current user" }
+  PATCH /users/me: { auth: true, body: [first_name, last_name, phone, avatar_url, address], returns: "updated user" }
+  GET /users/:userId: { returns: "public profile" }
+  POST /users/me/verification: { auth: true, multipart: [id_document] }
+  POST /users/me/payment-setup: { auth: true, returns: "Stripe onboarding URL" }
+  GET /users/me/bookings: { auth: true, query: [status, page, limit], returns: "user bookings" }
+  GET /users/me/offers: { auth: true, query: [status, page, limit], returns: "user purchase offers" }
+  GET /users/me/saved-properties: { auth: true, query: [page, limit] }
+  GET /users/me/properties: { auth: true, query: [status, listing_type, page, limit], returns: "owner properties" }
+  GET /users/me/bookings/received: { auth: true, query: [status, property_id, page, limit], returns: "bookings for owner properties" }
+  GET /users/me/offers/received: { auth: true, query: [status, property_id, page, limit], returns: "offers for owner properties" }
+  GET /users/me/stats: { auth: true, returns: "owner dashboard stats" }
+  GET /users/me/transactions: { auth: true, query: [type, start_date, end_date, page, limit] }
+  GET /users/:userId/reviews: { query: [review_type, page, limit] }
+
+# PROPERTIES
+properties:
+  GET /properties: { query: [listing_type, property_type, city, min_price, max_price, bedrooms, bathrooms, min_size, max_size, amenities, check_in, check_out, guests, instant_book, sort_by, page, limit, latitude, longitude, radius_km], returns: "paginated properties" }
+  GET /properties/:id: { returns: "property with images, amenities, owner, reviews" }
+  GET /properties/slug/:slug: { returns: "property by slug" }
+  POST /properties: { auth: true, owner: true, body: [property_type, listing_type, title, description, address, city, bedrooms, bathrooms, size_sqm, floor, year_built, price_per_night, price_per_month, min_rental_nights, cleaning_fee, deposit_amount, sale_price, price_negotiable, instant_book, amenity_ids], returns: "created property" }
+  PATCH /properties/:id: { auth: true, owner: true, body: "same as create", returns: "updated property" }
+  DELETE /properties/:id: { auth: true, owner: true }
+  POST /properties/:id/publish: { auth: true, owner: true }
+  POST /properties/:id/unpublish: { auth: true, owner: true }
+  POST /properties/:id/mark-sold: { auth: true, owner: true, body: [sale_date] }
+  GET /properties/:id/availability: { query: [start_date, end_date], returns: "availability calendar" }
+  POST /properties/:id/availability: { auth: true, owner: true, body: [dates_array] }
+  POST /properties/:id/images: { auth: true, owner: true, multipart: [images, captions] }
+  DELETE /properties/:id/images/:imageId: { auth: true, owner: true }
+  POST /properties/:id/images/reorder: { auth: true, owner: true, body: [image_order] }
+  GET /properties/:id/reviews: { query: [page, limit] }
+  GET /properties/:id/stats: { auth: true, owner: true, query: [start_date, end_date] }
+  POST /properties/:id/save: { auth: true }
+  DELETE /properties/:id/unsave: { auth: true }
+
+# RENTAL BOOKINGS
+bookings:
+  POST /bookings/rental: { auth: true, body: [property_id, check_in_date, check_out_date, number_of_guests, guest_phone, special_requests], returns: "booking + payment_intent" }
+  GET /bookings/rental/:id: { auth: true, returns: "booking details" }
+  POST /bookings/rental/:id/confirm: { auth: true, owner: true }
+  POST /bookings/rental/:id/cancel: { auth: true, body: [cancellation_reason] }
+  POST /bookings/rental/:id/check-in: { auth: true, owner: true }
+  POST /bookings/rental/:id/check-out: { auth: true, owner: true }
+
+# PURCHASE OFFERS
+offers:
+  POST /offers/purchase: { auth: true, body: [property_id, offer_amount, message, financing_type, contingencies, proposed_closing_date, offer_valid_until], returns: "created offer" }
+  GET /offers/purchase/:id: { auth: true, returns: "offer details" }
+  POST /offers/purchase/:id/accept: { auth: true, owner: true, body: [response_message] }
+  POST /offers/purchase/:id/reject: { auth: true, owner: true, body: [response_message] }
+  POST /offers/purchase/:id/counter: { auth: true, owner: true, body: [counter_offer_amount, counter_offer_message] }
+  POST /offers/purchase/:id/withdraw: { auth: true, buyer: true }
+
+# REVIEWS
+reviews:
+  POST /reviews: { auth: true, body: [review_type, property_id, rental_booking_id, reviewee_id, rating, title, comment, cleanliness_rating, accuracy_rating, communication_rating, location_rating, value_rating], returns: "created review" }
+  POST /reviews/:id/respond: { auth: true, owner: true, body: [response] }
+
+# MESSAGING
+messages:
+  POST /messages: { auth: true, body: [recipient_id, message, property_id, rental_booking_id, purchase_offer_id] }
+  GET /messages/conversations: { auth: true, returns: "conversations list" }
+  GET /messages/conversations/:id: { auth: true, query: [page, limit] }
+  POST /messages/:id/read: { auth: true }
+  POST /messages/conversations/:id/read: { auth: true }
+
+# NOTIFICATIONS
+notifications:
+  GET /notifications: { auth: true, query: [is_read, page, limit] }
+  POST /notifications/:id/read: { auth: true }
+  POST /notifications/read-all: { auth: true }
+  GET /notifications/unread-count: { auth: true }
+
+# AMENITIES
+amenities:
+  GET /amenities: { query: [category], returns: "all amenities" }
+
+# PAYMENTS
+payments:
+  POST /payments/rental-booking/:id/intent: { auth: true, returns: "Stripe client_secret" }
+  POST /payments/rental-booking/:id/confirm: { auth: true, body: [payment_intent_id] }
+  POST /payments/payout: { auth: true, owner: true, body: [amount] }
+
+# WEBHOOKS
+webhooks:
+  POST /webhooks/stripe: { description: "Stripe payment events" }
+
+# STANDARD ERRORS
+errors:
+  400: "Bad Request - validation error"
+  401: "Unauthorized - auth required"
+  403: "Forbidden - insufficient permissions"
+  404: "Not Found"
+  409: "Conflict - state or uniqueness violation"
+  429: "Rate limit exceeded"
+  500: "Internal server error"
+
+# PAGINATION FORMAT
+pagination:
+  request: { page: 1, limit: 20 }
+  response: { data: [], pagination: { page, limit, total, total_pages, has_next, has_prev } }

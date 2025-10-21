@@ -1,0 +1,673 @@
+# Technical Architecture - stambeno.ba MVP
+
+version: "1.0"
+platform: "stambeno.ba"
+
+# ============================================================================
+# SYSTEM ARCHITECTURE
+# ============================================================================
+
+architecture:
+  pattern: "Client-Server with RESTful API"
+  deployment: "Cloud-native, containerized"
+  
+  layers:
+    presentation: "React SPA (Single Page Application)"
+    api: "Node.js REST API"
+    business_logic: "Service layer with domain logic"
+    data_access: "ORM with repository pattern"
+    database: "PostgreSQL relational database"
+    cache: "Redis for sessions and frequently accessed data"
+    storage: "Cloud object storage for images/files"
+    search: "Elasticsearch for advanced property search (optional for MVP)"
+
+# ============================================================================
+# TECHNOLOGY STACK
+# ============================================================================
+
+tech_stack:
+  
+  frontend:
+    framework: "React 18+"
+    language: "TypeScript"
+    routing: "React Router v6"
+    state_management: "React Context + React Query (TanStack Query)"
+    ui_library: "shadcn/ui + Tailwind CSS"
+    icons: "Lucide React"
+    forms: "React Hook Form + Zod validation"
+    date_handling: "date-fns"
+    http_client: "Axios"
+    maps: "Mapbox GL JS or Google Maps API"
+    image_upload: "react-dropzone"
+    payments: "Stripe React SDK (@stripe/react-stripe-js)"
+    notifications: "React Hot Toast"
+    build_tool: "Vite"
+    
+    key_pages:
+      - "Homepage with search"
+      - "Search results (grid/list/map view)"
+      - "Property detail page"
+      - "User authentication (login/register)"
+      - "User dashboard"
+      - "Owner dashboard"
+      - "Property listing creation/edit"
+      - "Booking flow"
+      - "Offer submission flow"
+      - "Messages/inbox"
+      - "User profile"
+      - "Bookings list"
+      - "Saved properties"
+      - "Reviews"
+      - "Notifications"
+  
+  backend:
+    runtime: "Node.js 20+ LTS"
+    framework: "Express.js"
+    language: "TypeScript"
+    api_style: "RESTful"
+    authentication: "JWT (jsonwebtoken) + bcrypt"
+    authorization: "Custom middleware (role and resource-based)"
+    validation: "Joi or Zod"
+    orm: "Prisma or TypeORM"
+    migrations: "Built-in ORM migrations"
+    testing: "Jest + Supertest"
+    logging: "Winston"
+    error_handling: "Centralized error middleware"
+    rate_limiting: "express-rate-limit"
+    cors: "cors middleware"
+    security: "helmet middleware"
+    
+    project_structure:
+      src:
+        - "controllers/ - HTTP request handlers"
+        - "services/ - Business logic layer"
+        - "repositories/ - Data access layer"
+        - "models/ - Database models/entities"
+        - "middlewares/ - Express middlewares (auth, error, etc.)"
+        - "validators/ - Request validation schemas"
+        - "utils/ - Helper functions"
+        - "config/ - Configuration management"
+        - "types/ - TypeScript type definitions"
+        - "jobs/ - Background jobs (cron, queues)"
+        - "routes/ - API route definitions"
+  
+  database:
+    primary: "PostgreSQL 15+"
+    rationale: "ACID compliance, relations, JSON support, mature ecosystem"
+    connection_pool: "pg pool"
+    indexing: "Strategic indexes on frequent queries (see models doc)"
+    
+    tables: "See mvp-core-models.yaml for complete schema"
+    
+    backup_strategy:
+      frequency: "Daily automated backups"
+      retention: "30 days"
+      method: "Continuous archiving (WAL)"
+  
+  cache:
+    system: "Redis 7+"
+    use_cases:
+      - "Session storage"
+      - "Property search results (15 min TTL)"
+      - "User profile cache"
+      - "Availability calendar cache"
+      - "Rate limiting counters"
+      - "Real-time features (online status)"
+    
+    cache_invalidation:
+      strategy: "Event-based invalidation on data change"
+      example: "Invalidate property cache when property updated"
+  
+  file_storage:
+    provider: "AWS S3 or CloudFlare R2 or DigitalOcean Spaces"
+    structure:
+      - "users/{userId}/avatar.jpg"
+      - "properties/{propertyId}/images/{imageId}.jpg"
+      - "properties/{propertyId}/images/thumbnails/{imageId}_thumb.jpg"
+      - "documents/{userId}/id_verification.pdf"
+    
+    cdn: "CloudFront or Cloudflare CDN for image delivery"
+    
+    image_processing:
+      library: "sharp (Node.js)"
+      operations:
+        - "Resize/compress uploads"
+        - "Generate thumbnails"
+        - "Convert to WebP"
+        - "Max dimensions: 2400x2400"
+        - "Quality: 85%"
+  
+  payments:
+    provider: "Stripe"
+    products:
+      - "Stripe Checkout or Payment Intents for bookings"
+      - "Stripe Connect for owner payouts"
+      - "Stripe Webhooks for event handling"
+    
+    flow:
+      rental_booking:
+        - "Create PaymentIntent with amount"
+        - "Client-side confirms payment"
+        - "Webhook confirms success"
+        - "Release funds to owner after check-in"
+      
+      owner_payout:
+        - "Owner connected via Stripe Connect"
+        - "Transfer to connected account"
+        - "Platform fee automatically deducted"
+    
+    currency: "BAM (Bosnian Convertible Mark)"
+    
+    testing:
+      test_mode: "Stripe test keys in development"
+      test_cards: "4242 4242 4242 4242 and others"
+  
+  email:
+    provider: "SendGrid or AWS SES"
+    templates:
+      - "Welcome email"
+      - "Email verification"
+      - "Password reset"
+      - "Booking confirmation"
+      - "Booking request (owner)"
+      - "Offer received"
+      - "Payment confirmation"
+      - "Review reminder"
+      - "Message notification"
+    
+    sending:
+      transactional: "Immediate via API"
+      marketing: "Batch via provider (post-MVP)"
+  
+  sms:
+    provider: "Twilio or similar"
+    use_cases:
+      - "Phone verification (optional)"
+      - "Critical notifications (booking confirmation)"
+      - "2FA (post-MVP)"
+    
+    note: "SMS is optional for MVP, can start with email only"
+  
+  push_notifications:
+    web: "Web Push API + service workers"
+    mobile: "Firebase Cloud Messaging (when mobile apps built)"
+    
+    triggers: "See notification_triggers in business-logic.yaml"
+  
+  maps:
+    provider: "Mapbox or Google Maps"
+    features:
+      - "Property location display"
+      - "Geocoding (address to lat/lng)"
+      - "Reverse geocoding"
+      - "Map search interface"
+      - "Radius search visualization"
+    
+    optimization: "Cache geocoding results in database"
+  
+  background_jobs:
+    system: "Bull Queue + Redis"
+    jobs:
+      - "Send emails (queue)"
+      - "Process image uploads"
+      - "Generate thumbnails"
+      - "Send push notifications"
+      - "Expire offers (cron: every hour)"
+      - "Auto-cancel unconfirmed bookings (cron: every 15 min)"
+      - "Release deposits (cron: every 6 hours)"
+      - "Send reminders (cron: daily)"
+    
+    monitoring: "Bull Board UI for job monitoring"
+  
+  monitoring_logging:
+    application_monitoring: "Sentry for error tracking"
+    logging: "Winston to structured JSON logs"
+    log_aggregation: "CloudWatch, LogDNA, or self-hosted Loki"
+    metrics: "Prometheus + Grafana (post-MVP)"
+    uptime: "UptimeRobot or similar"
+    
+    log_levels:
+      production: "info, warn, error"
+      development: "debug, info, warn, error"
+  
+  security:
+    https: "Required in production (TLS 1.3)"
+    authentication: "JWT with httpOnly cookies or Authorization header"
+    password_hashing: "bcrypt with cost factor 12"
+    input_validation: "Validate all inputs server-side"
+    sql_injection: "Prevented by ORM parameterized queries"
+    xss: "Sanitize user inputs, CSP headers"
+    csrf: "CSRF tokens for state-changing operations"
+    rate_limiting: "API rate limits per IP and per user"
+    
+    jwt_strategy:
+      access_token:
+        expiry: "1 hour"
+        storage: "localStorage or httpOnly cookie"
+        payload: "userId, email, role"
+      
+      refresh_token:
+        expiry: "30 days"
+        storage: "httpOnly secure cookie"
+        rotation: "Rotate on each refresh"
+    
+    secrets_management:
+      development: ".env file (not committed)"
+      production: "Environment variables or secret manager (AWS Secrets Manager)"
+  
+  testing:
+    unit_tests: "Jest for business logic"
+    integration_tests: "Supertest for API endpoints"
+    e2e_tests: "Playwright or Cypress (critical user flows)"
+    coverage_target: "70% minimum"
+    
+    test_database: "Separate PostgreSQL instance for tests"
+    
+    ci_cd:
+      - "Run tests on every commit"
+      - "Lint code (ESLint + Prettier)"
+      - "Type check (TypeScript)"
+      - "Build application"
+      - "Deploy on merge to main"
+
+# ============================================================================
+# DEPLOYMENT INFRASTRUCTURE
+# ============================================================================
+
+infrastructure:
+  
+  hosting:
+    recommendation: "AWS, Google Cloud, or DigitalOcean"
+    
+    components:
+      frontend:
+        option_1: "Vercel or Netlify (easiest)"
+        option_2: "AWS S3 + CloudFront"
+        option_3: "Nginx container serving static build"
+      
+      backend:
+        option_1: "AWS ECS/Fargate (containerized)"
+        option_2: "DigitalOcean App Platform"
+        option_3: "VPS with Docker Compose"
+        option_4: "Railway, Render, or Fly.io"
+      
+      database:
+        option_1: "AWS RDS PostgreSQL"
+        option_2: "DigitalOcean Managed Database"
+        option_3: "Supabase (managed Postgres)"
+        option_4: "Self-hosted with regular backups"
+      
+      redis:
+        option_1: "AWS ElastiCache"
+        option_2: "DigitalOcean Managed Redis"
+        option_3: "Upstash (serverless)"
+        option_4: "Self-hosted in container"
+      
+      storage:
+        option_1: "AWS S3"
+        option_2: "CloudFlare R2"
+        option_3: "DigitalOcean Spaces"
+  
+  containerization:
+    tool: "Docker"
+    
+    services:
+      - name: "backend"
+        image: "node:20-alpine"
+        build: "Multi-stage build for optimization"
+        port: 3000
+      
+      - name: "postgres"
+        image: "postgres:15-alpine"
+        volume: "Persistent volume for data"
+      
+      - name: "redis"
+        image: "redis:7-alpine"
+        volume: "Optional persistence"
+      
+      - name: "nginx"
+        image: "nginx:alpine"
+        purpose: "Reverse proxy (if needed)"
+    
+    orchestration:
+      development: "docker-compose.yml"
+      production: "Docker Swarm, Kubernetes, or managed container service"
+  
+  ci_cd:
+    pipeline: "GitHub Actions, GitLab CI, or Bitbucket Pipelines"
+    
+    workflow:
+      on_commit:
+        - "Run linter"
+        - "Run tests"
+        - "Build application"
+        - "Deploy to staging (on develop branch)"
+        - "Deploy to production (on main branch)"
+      
+      environments:
+        development: "Local machines"
+        staging: "Staging environment (mirrors production)"
+        production: "Live production environment"
+  
+  domains_ssl:
+    domain: "stambeno.ba"
+    dns: "CloudFlare (for DNS + DDoS protection)"
+    ssl: "Let's Encrypt (free) or CloudFlare SSL"
+    
+    subdomains:
+      - "www.stambeno.ba (main site)"
+      - "api.stambeno.ba (API)"
+      - "admin.stambeno.ba (admin panel, post-MVP)"
+  
+  scaling:
+    initial: "Single server is sufficient for MVP"
+    
+    horizontal_scaling:
+      - "Load balancer in front of multiple backend instances"
+      - "Read replicas for database"
+      - "CDN for static assets"
+    
+    vertical_scaling:
+      - "Upgrade server resources as traffic grows"
+    
+    caching:
+      - "Redis for frequently accessed data"
+      - "CDN for images and static assets"
+      - "Browser caching with proper headers"
+  
+  monitoring:
+    health_checks: "API /health endpoint"
+    uptime_monitoring: "Ping /health every 5 minutes"
+    error_tracking: "Sentry reports errors in real-time"
+    performance: "Monitor API response times"
+    
+    alerts:
+      - "Server down"
+      - "High error rate"
+      - "Database connection issues"
+      - "High response times"
+
+# ============================================================================
+# DEVELOPMENT WORKFLOW
+# ============================================================================
+
+development:
+  
+  version_control:
+    system: "Git"
+    platform: "GitHub, GitLab, or Bitbucket"
+    
+    branching_strategy:
+      main: "Production-ready code"
+      develop: "Integration branch for features"
+      feature_branches: "feature/feature-name"
+      hotfix_branches: "hotfix/issue-description"
+    
+    commit_convention: "Conventional Commits (feat, fix, docs, etc.)"
+  
+  local_setup:
+    requirements:
+      - "Node.js 20+"
+      - "Docker + Docker Compose"
+      - "PostgreSQL (or via Docker)"
+      - "Redis (or via Docker)"
+    
+    steps:
+      - "Clone repository"
+      - "Copy .env.example to .env"
+      - "Fill in environment variables"
+      - "npm install (backend and frontend)"
+      - "docker-compose up -d (start DB and Redis)"
+      - "npm run migrate (run database migrations)"
+      - "npm run seed (optional: seed test data)"
+      - "npm run dev (start backend and frontend)"
+    
+    development_urls:
+      frontend: "http://localhost:5173"
+      backend: "http://localhost:3000"
+      api_docs: "http://localhost:3000/api-docs (Swagger)"
+  
+  code_quality:
+    linting:
+      - "ESLint for JavaScript/TypeScript"
+      - "Prettier for code formatting"
+      - "Run on pre-commit hook (husky)"
+    
+    type_checking:
+      - "TypeScript strict mode"
+      - "Run tsc --noEmit before commits"
+    
+    code_review:
+      - "All code must be reviewed before merge"
+      - "At least 1 approval required"
+      - "Automated tests must pass"
+  
+  documentation:
+    api: "Swagger/OpenAPI spec"
+    code: "JSDoc comments for functions"
+    architecture: "These YAML files + diagrams"
+    readme: "Comprehensive README.md with setup instructions"
+
+# ============================================================================
+# DATA FLOW EXAMPLES
+# ============================================================================
+
+data_flow_examples:
+  
+  example_1_property_search:
+    step_1: "User enters search criteria on frontend"
+    step_2: "Frontend sends GET /api/v1/properties with query params"
+    step_3: "Backend receives request, validates parameters"
+    step_4: "Service layer builds database query with filters"
+    step_5: "Check Redis cache for results (cache key from query params)"
+    step_6_cache_hit: "Return cached results immediately"
+    step_7_cache_miss:
+      - "Query PostgreSQL with filters, joins, pagination"
+      - "Transform results to API response format"
+      - "Cache results in Redis (TTL: 15 min)"
+      - "Return results to client"
+    step_8: "Frontend receives data, renders property cards"
+  
+  example_2_create_booking:
+    step_1: "Guest fills booking form and submits"
+    step_2: "Frontend sends POST /api/v1/bookings/rental with booking data"
+    step_3: "Backend validates request body"
+    step_4: "Service checks property availability"
+    step_5: "Calculate pricing (base + fees)"
+    step_6: "Create booking record with status='pending'"
+    step_7: "Create Stripe PaymentIntent"
+    step_8: "Return payment client_secret to frontend"
+    step_9: "Frontend shows Stripe payment form"
+    step_10: "User enters card details, submits"
+    step_11: "Stripe processes payment"
+    step_12: "Stripe sends webhook to backend"
+    step_13: "Backend verifies webhook signature"
+    step_14: "Update booking status based on property.instant_book"
+    step_15: "If instant_book, confirm booking, block dates"
+    step_16: "Send notifications to guest and owner"
+    step_17: "Send confirmation email"
+    step_18: "Return success response to frontend"
+    step_19: "Frontend redirects to booking confirmation page"
+  
+  example_3_message_real_time:
+    step_1: "User types message and clicks send"
+    step_2: "Frontend sends POST /api/v1/messages"
+    step_3: "Backend creates message record in database"
+    step_4: "Backend publishes event to Redis pub/sub (or WebSocket room)"
+    step_5: "Recipient's open WebSocket receives message immediately"
+    step_6: "Frontend updates conversation UI in real-time"
+    step_7: "Backend triggers push notification to recipient"
+    step_8: "Backend sends email if recipient offline for 10+ minutes"
+    
+    note: "For MVP, polling every 10s acceptable if WebSockets not implemented"
+
+# ============================================================================
+# PERFORMANCE CONSIDERATIONS
+# ============================================================================
+
+performance:
+  
+  database:
+    - "Index foreign keys and frequently queried fields"
+    - "Use EXPLAIN ANALYZE to optimize slow queries"
+    - "Pagination for all list endpoints"
+    - "N+1 query prevention with ORM eager loading"
+    - "Database connection pooling"
+  
+  caching:
+    - "Cache expensive calculations (pricing, availability)"
+    - "Cache search results"
+    - "Cache user sessions"
+    - "CDN for all static assets and images"
+  
+  api:
+    - "Compression middleware (gzip/brotli)"
+    - "Proper HTTP caching headers"
+    - "Rate limiting to prevent abuse"
+    - "Pagination instead of returning all records"
+  
+  frontend:
+    - "Code splitting and lazy loading"
+    - "Image optimization (WebP, lazy loading)"
+    - "Debounce search inputs"
+    - "Virtual scrolling for long lists"
+    - "Minimize bundle size"
+  
+  images:
+    - "Compress uploads on server"
+    - "Generate multiple sizes (thumbnail, medium, large)"
+    - "Serve via CDN"
+    - "Use modern formats (WebP, AVIF)"
+    - "Lazy load images below fold"
+
+# ============================================================================
+# MVP PRIORITIES
+# ============================================================================
+
+mvp_features:
+  must_have:
+    - "User registration and authentication"
+    - "Property listing (create, edit, publish)"
+    - "Property search and filters"
+    - "Property detail view"
+    - "Rental booking flow with payment"
+    - "Purchase offer submission and management"
+    - "Messaging between users"
+    - "Reviews system"
+    - "User profiles"
+    - "Owner dashboard (view bookings, offers)"
+    - "Guest dashboard (view bookings, offers)"
+    - "Email notifications"
+    - "Image upload and management"
+    - "Availability calendar"
+  
+  nice_to_have:
+    - "Map view for search results"
+    - "Saved/favorite properties"
+    - "Push notifications"
+    - "SMS notifications"
+    - "Advanced analytics for owners"
+    - "Multi-language support"
+    - "Dark mode"
+  
+  post_mvp:
+    - "Mobile apps (iOS, Android)"
+    - "Admin panel"
+    - "Reporting and moderation tools"
+    - "Advanced search (Elasticsearch)"
+    - "AI-powered pricing recommendations"
+    - "Virtual tour integration"
+    - "Video uploads"
+    - "Social login (Google, Facebook)"
+    - "Referral program"
+    - "Premium listings"
+    - "Promoted properties"
+
+# ============================================================================
+# IMPLEMENTATION PHASES
+# ============================================================================
+
+implementation_phases:
+  
+  phase_1_foundation:
+    duration: "2-3 weeks"
+    deliverables:
+      - "Project setup (frontend + backend)"
+      - "Database schema implementation"
+      - "User authentication"
+      - "Basic API structure"
+      - "CI/CD pipeline"
+  
+  phase_2_core_features:
+    duration: "4-5 weeks"
+    deliverables:
+      - "Property CRUD operations"
+      - "Property search and filters"
+      - "Image upload and storage"
+      - "Frontend UI components"
+      - "Homepage and search pages"
+      - "Property detail page"
+  
+  phase_3_transactions:
+    duration: "3-4 weeks"
+    deliverables:
+      - "Rental booking flow"
+      - "Purchase offer flow"
+      - "Stripe integration"
+      - "Payment processing"
+      - "Booking management"
+      - "Offer management"
+  
+  phase_4_communication:
+    duration: "2-3 weeks"
+    deliverables:
+      - "Messaging system"
+      - "Notifications system"
+      - "Email templates"
+      - "Reviews system"
+  
+  phase_5_dashboards:
+    duration: "2-3 weeks"
+    deliverables:
+      - "User dashboard"
+      - "Owner dashboard"
+      - "Booking management UI"
+      - "Offer management UI"
+      - "Profile management"
+  
+  phase_6_polish:
+    duration: "2-3 weeks"
+    deliverables:
+      - "Testing and bug fixes"
+      - "Performance optimization"
+      - "Security audit"
+      - "Documentation"
+      - "Deployment to production"
+  
+  total_estimated_timeline: "15-21 weeks (4-5 months)"
+
+# ============================================================================
+# SUCCESS METRICS
+# ============================================================================
+
+success_metrics:
+  
+  technical:
+    - "API response time < 500ms (p95)"
+    - "Page load time < 3 seconds"
+    - "Uptime > 99.5%"
+    - "Test coverage > 70%"
+    - "Zero critical security vulnerabilities"
+  
+  business:
+    - "100+ properties listed in first 3 months"
+    - "50+ completed bookings in first 3 months"
+    - "10+ successful sales in first 6 months"
+    - "User satisfaction > 4.5/5 average"
+    - "70%+ booking request acceptance rate"
+  
+  user_experience:
+    - "Property search to booking < 5 minutes"
+    - "Property listing creation < 15 minutes"
+    - "Mobile responsive on all pages"
+    - "Accessibility AA compliant"

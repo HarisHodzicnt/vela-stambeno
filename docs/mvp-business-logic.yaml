@@ -1,0 +1,612 @@
+# Business Logic & Rules - stambeno.ba MVP
+
+version: "1.0"
+
+# ============================================================================
+# RENTAL BOOKING LOGIC
+# ============================================================================
+
+rental_booking_rules:
+  
+  availability_check:
+    rule: "Property must be available for ALL dates in requested range"
+    implementation:
+      - "Check property.status = 'active'"
+      - "Check property.listing_type IN ['rent', 'both']"
+      - "Query PropertyAvailability for date range"
+      - "All dates must have status = 'available'"
+      - "No existing confirmed bookings overlap with requested dates"
+    
+  minimum_nights:
+    rule: "Booking must meet property's min_rental_nights requirement"
+    calculation: "total_nights = (check_out_date - check_in_date)"
+    validation: "total_nights >= property.min_rental_nights"
+  
+  maximum_nights:
+    rule: "If property has max_rental_nights, booking cannot exceed it"
+    validation: "total_nights <= property.max_rental_nights (if set)"
+  
+  guest_capacity:
+    rule: "Number of guests should not exceed property capacity"
+    note: "Soft validation - can be overridden with owner approval"
+  
+  pricing_calculation:
+    base_price:
+      short_term: "price_per_night * total_nights"
+      long_term: "price_per_month * months (if > 30 days)"
+      price_override: "Use PropertyAvailability.price_override if set for specific dates"
+    
+    cleaning_fee: "property.cleaning_fee (one-time)"
+    
+    service_fee:
+      percentage: 10
+      calculation: "base_price * 0.10"
+      note: "Platform commission"
+    
+    deposit: "property.deposit_amount (refundable)"
+    
+    total_price: "base_price + cleaning_fee + service_fee"
+    total_to_pay: "total_price + deposit_amount"
+  
+  instant_book_logic:
+    if_instant_book_true:
+      - "Booking status immediately = 'confirmed' after payment"
+      - "No owner approval required"
+      - "Availability automatically blocked"
+    
+    if_instant_book_false:
+      - "Booking status = 'pending' after payment"
+      - "Owner must confirm within 24 hours"
+      - "If not confirmed in 24h, auto-refund and cancel"
+      - "Owner can reject with reason"
+  
+  payment_flow:
+    step_1: "Create booking with status = 'pending'"
+    step_2: "Create Stripe payment intent for total_to_pay"
+    step_3: "Guest completes payment"
+    step_4_instant: "If instant_book = true, status = 'confirmed', block dates"
+    step_4_approval: "If instant_book = false, status = 'pending', await owner confirmation"
+    step_5: "If confirmed, hold deposit separately, transfer rest to owner (minus platform fee)"
+  
+  cancellation_policy:
+    by_guest:
+      before_checkin_14_days:
+        refund: "100% of base_price + cleaning_fee"
+        deposit: "100% refunded"
+        service_fee: "50% refunded"
+      
+      before_checkin_7_days:
+        refund: "50% of base_price"
+        cleaning_fee: "Not refunded"
+        deposit: "100% refunded"
+        service_fee: "Not refunded"
+      
+      less_than_7_days:
+        refund: "No refund"
+        deposit: "100% refunded if no damage"
+    
+    by_owner:
+      anytime:
+        refund: "100% full refund to guest"
+        penalty: "Owner charged 10% of booking value as penalty"
+  
+  check_in_out:
+    check_in:
+      trigger: "Owner marks as checked in"
+      action: "Update checked_in_at timestamp"
+    
+    check_out:
+      trigger: "Owner marks as checked out"
+      action:
+        - "Update checked_out_at timestamp"
+        - "Update booking status = 'completed'"
+        - "Release deposit (if no issues)"
+        - "Trigger review prompt to both guest and owner"
+  
+  deposit_release:
+    automatic: "Deposit auto-released 48 hours after check-out if no dispute"
+    manual: "Owner can release immediately or file dispute for damages"
+    dispute: "If dispute filed, hold deposit pending resolution"
+
+# ============================================================================
+# PROPERTY SALES LOGIC
+# ============================================================================
+
+purchase_offer_rules:
+  
+  eligibility:
+    rule: "Property must be available for sale"
+    validation:
+      - "property.status IN ['active', 'inactive']"
+      - "property.listing_type IN ['sale', 'both']"
+      - "property.status != 'sold'"
+      - "property.status != 'under_contract'"
+  
+  offer_creation:
+    requirements:
+      - "buyer must be verified user"
+      - "offer_amount must be > 0"
+      - "offer_valid_until must be future timestamp"
+      - "financing_type must be specified"
+    
+    notification:
+      - "Notify property owner immediately"
+      - "Email + in-app notification"
+      - "Include all offer details"
+  
+  offer_expiration:
+    rule: "Offer automatically expires if not responded to before offer_valid_until"
+    cron_job: "Check every hour for expired offers"
+    action: "Set status = 'expired'"
+  
+  owner_response_options:
+    accept:
+      action:
+        - "Set offer status = 'accepted'"
+        - "Set property status = 'under_contract'"
+        - "Reject all other pending offers for this property"
+        - "Notify buyer of acceptance"
+        - "Initiate contract signing process"
+    
+    reject:
+      action:
+        - "Set offer status = 'rejected'"
+        - "Notify buyer with reason"
+        - "Property remains active"
+    
+    counter:
+      action:
+        - "Set offer status = 'countered'"
+        - "Add counter_offer_amount and counter_offer_message"
+        - "Notify buyer of counter offer"
+        - "Ball in buyer's court - they can accept, reject, or counter again"
+  
+  buyer_actions:
+    withdraw:
+      allowed: "Only if status = 'pending' or 'countered'"
+      action: "Set status = 'withdrawn'"
+    
+    respond_to_counter:
+      accept_counter: "Accept counter offer - moves to contract phase"
+      make_new_offer: "Submit new offer with different terms"
+  
+  multiple_offers:
+    rule: "Property can receive multiple offers simultaneously"
+    owner_visibility: "Owner sees all offers and can compare"
+    handling: "Owner can accept one, counter multiple, or reject all"
+  
+  under_contract_phase:
+    trigger: "Offer accepted"
+    property_status: "under_contract"
+    property_visibility: "Property marked as 'under contract' but still visible with tag"
+    rental_availability: "If listing_type = 'both', rentals can continue until closing"
+    
+    contract_signing:
+      platform_role: "Facilitate initial agreement"
+      offline_process: "Actual legal contract, notary, etc. happens offline"
+      platform_tracking: "Track contract_signed status"
+    
+    closing:
+      manual: "Owner marks property as 'sold' when transaction completes"
+      action:
+        - "property.status = 'sold'"
+        - "property.sold_at = current_timestamp"
+        - "Property no longer appears in active listings"
+        - "Property history preserved"
+  
+  platform_fee:
+    rental: "10% of booking value"
+    sale: "2% of final sale price"
+    timing: "Collected upon successful transaction completion"
+
+# ============================================================================
+# USER VERIFICATION LOGIC
+# ============================================================================
+
+user_verification:
+  
+  identity_verification:
+    required_for:
+      - "Listing properties (owners)"
+      - "Making purchase offers over certain amount"
+      - "Completing high-value bookings"
+    
+    process:
+      step_1: "User uploads government ID"
+      step_2: "Admin/automated system verifies document"
+      step_3: "Set verification_status = 'verified' or 'rejected'"
+      step_4: "If verified, is_verified = true"
+    
+    auto_verification:
+      use: "Third-party service like Stripe Identity or Sumsub"
+      fallback: "Manual review for edge cases"
+  
+  payment_verification:
+    owner_setup:
+      requirement: "Must setup Stripe Connect account to receive payments"
+      process: "Stripe KYC/verification built-in"
+      status: "stripe_account_id must be set"
+    
+    guest_payment:
+      requirement: "Valid payment method on file"
+      verification: "Stripe validates payment method"
+
+# ============================================================================
+# REVIEW SYSTEM LOGIC
+# ============================================================================
+
+review_rules:
+  
+  eligibility:
+    property_review:
+      requirement: "Must have completed rental booking"
+      timing: "Can review within 14 days after check-out"
+      limitation: "One review per booking"
+    
+    guest_review:
+      requirement: "Must be property owner of completed booking"
+      timing: "Within 14 days after check-out"
+    
+    owner_review:
+      requirement: "Must be guest of completed booking"
+      timing: "Within 14 days after check-out"
+  
+  review_visibility:
+    timing: "Reviews published immediately after submission"
+    mutual: "Both parties can see each other's reviews after both submit OR after 14-day window closes"
+    purpose: "Prevents bias based on seeing other's review first"
+  
+  rating_calculation:
+    property_average:
+      formula: "SUM(all_property_reviews.rating) / COUNT(reviews)"
+      update: "Recalculate on each new review"
+      display: "Show to 1 decimal place"
+    
+    user_average:
+      as_owner: "Average of all reviews received as property owner"
+      as_guest: "Average of all reviews received as guest"
+  
+  detailed_ratings:
+    for_properties: "cleanliness, accuracy, communication, location, value"
+    calculation: "Each rated 1-5, average shown separately"
+    overall: "Main rating is overall experience"
+  
+  owner_response:
+    allowed: "Owner can respond to any review of their property"
+    timing: "Within 30 days of review publication"
+    visibility: "Response shown publicly under review"
+    limitation: "One response per review, cannot edit after posting"
+  
+  moderation:
+    automatic: "Flag reviews with profanity or inappropriate content"
+    manual: "Allow users to report inappropriate reviews"
+    action: "Admin review flagged content, can hide if violates policy"
+
+# ============================================================================
+# MESSAGING SYSTEM LOGIC
+# ============================================================================
+
+messaging_rules:
+  
+  conversation_creation:
+    trigger: "First message between two users"
+    conversation_id: "Generated UUID shared by all messages between user pair"
+    context: "Can be linked to property, booking, or offer"
+  
+  message_threading:
+    grouping: "All messages between same two users in one conversation"
+    context_aware: "Show relevant property/booking/offer info in conversation header"
+  
+  notifications:
+    new_message: "Push notification + email (if user preferences allow)"
+    unread_count: "Badge on messaging icon"
+  
+  restrictions:
+    spam_prevention: "Rate limit: max 50 messages per hour per user"
+    contact_info: "Allow sharing phone/email (needed for rental/sale coordination)"
+    payment_outside: "Warn against off-platform payments (but not strictly enforced for sales)"
+  
+  message_history:
+    retention: "Keep all messages indefinitely"
+    deletion: "Users can delete for themselves (not for other party)"
+    archived: "Can archive conversations but not delete"
+
+# ============================================================================
+# NOTIFICATION LOGIC
+# ============================================================================
+
+notification_triggers:
+  
+  booking_related:
+    - trigger: "New booking request received"
+      recipient: "property_owner"
+      type: "booking_request"
+    
+    - trigger: "Booking confirmed"
+      recipient: "guest"
+      type: "booking_confirmed"
+    
+    - trigger: "Booking cancelled"
+      recipient: "guest and owner"
+      type: "booking_cancelled"
+    
+    - trigger: "24h before check-in"
+      recipient: "guest and owner"
+      type: "check_in_reminder"
+    
+    - trigger: "Check-out completed"
+      recipient: "guest and owner"
+      type: "review_prompt"
+  
+  offer_related:
+    - trigger: "New purchase offer received"
+      recipient: "property_owner"
+      type: "purchase_offer_received"
+    
+    - trigger: "Offer accepted"
+      recipient: "buyer"
+      type: "offer_accepted"
+    
+    - trigger: "Offer rejected"
+      recipient: "buyer"
+      type: "offer_rejected"
+    
+    - trigger: "Counter offer"
+      recipient: "buyer"
+      type: "offer_countered"
+    
+    - trigger: "Offer expires in 24h"
+      recipient: "property_owner"
+      type: "offer_expiring_soon"
+  
+  financial:
+    - trigger: "Payment successful"
+      recipient: "guest"
+      type: "payment_confirmed"
+    
+    - trigger: "Payout completed"
+      recipient: "owner"
+      type: "payout_completed"
+    
+    - trigger: "Deposit released"
+      recipient: "guest"
+      type: "deposit_released"
+  
+  social:
+    - trigger: "New message received"
+      recipient: "message_recipient"
+      type: "message_received"
+    
+    - trigger: "New review received"
+      recipient: "reviewed_user_or_property_owner"
+      type: "review_received"
+  
+  delivery_channels:
+    in_app: "Always"
+    email: "User preference (default: enabled for important)"
+    push: "User preference (default: enabled)"
+    sms: "Only for critical (booking confirmations, payment issues)"
+
+# ============================================================================
+# SEARCH & DISCOVERY LOGIC
+# ============================================================================
+
+search_algorithm:
+  
+  basic_filters:
+    listing_type: "Filter by rent/sale/both"
+    property_type: "Filter by apartment/house/etc"
+    location: "City, municipality"
+    price_range: "Min/max for rent (per night/month) or sale price"
+    size: "Min/max square meters"
+    bedrooms: "Exact or minimum"
+    bathrooms: "Minimum"
+    amenities: "Must have all selected amenities"
+  
+  availability_filter:
+    for_rentals:
+      input: "check_in and check_out dates"
+      logic: "Return only properties available for entire date range"
+      calculation: "Check PropertyAvailability table and existing bookings"
+  
+  geo_search:
+    input: "latitude, longitude, radius_km"
+    logic: "Find properties within radius using haversine formula"
+    fallback: "If no geo provided, search by city name"
+  
+  sorting:
+    price_asc: "Lowest price first (rental or sale based on listing_type filter)"
+    price_desc: "Highest price first"
+    newest: "Most recently published"
+    rating: "Highest rated first"
+    relevance: "Default - combination of rating, recency, completeness"
+  
+  ranking_factors:
+    for_relevance_sort:
+      - "Average rating (weight: 0.3)"
+      - "Number of reviews (weight: 0.2)"
+      - "Profile completeness (weight: 0.15)"
+      - "Response time (weight: 0.15)"
+      - "Recency (weight: 0.1)"
+      - "Instant book enabled (weight: 0.1)"
+  
+  featured_properties:
+    display: "Show at top of search results"
+    marking: "is_featured = true"
+    criteria: "Premium listing (paid feature - post-MVP) or admin selected"
+
+# ============================================================================
+# PROPERTY LISTING RULES
+# ============================================================================
+
+property_listing_rules:
+  
+  creation_requirements:
+    must_have:
+      - "All required fields filled"
+      - "At least 1 photo"
+      - "Valid address"
+      - "Pricing set (based on listing_type)"
+    
+    validation:
+      listing_type_rent: "Must have price_per_night OR price_per_month"
+      listing_type_sale: "Must have sale_price"
+      listing_type_both: "Must have rental AND sale pricing"
+  
+  status_workflow:
+    draft:
+      description: "Property being created, not published"
+      visibility: "Only owner can see"
+      actions: ["edit", "publish", "delete"]
+    
+    active:
+      description: "Property live and searchable"
+      visibility: "Public"
+      actions: ["edit", "unpublish", "mark_sold", "receive_bookings", "receive_offers"]
+    
+    inactive:
+      description: "Property unlisted temporarily"
+      visibility: "Not in search, direct link works"
+      actions: ["edit", "publish", "delete"]
+    
+    under_contract:
+      description: "Sale offer accepted, pending closing"
+      visibility: "Public with 'Under Contract' tag"
+      actions: ["limited_edit", "mark_sold"]
+      rentals: "Still available if listing_type = 'both'"
+    
+    sold:
+      description: "Property successfully sold"
+      visibility: "Not in search, archived"
+      actions: ["view_only"]
+    
+    rented_long_term:
+      description: "Property rented on long-term contract"
+      visibility: "Not in search"
+      actions: ["reactivate"]
+  
+  edit_restrictions:
+    cannot_change_while_active_bookings:
+      - "listing_type (cannot remove 'rent' if active bookings)"
+      - "Cannot delete property"
+    
+    can_always_change:
+      - "Description, photos"
+      - "Price (for future bookings)"
+      - "Availability calendar"
+  
+  photo_requirements:
+    minimum: 1
+    recommended: "5-10"
+    maximum: 20
+    formats: ["jpg", "jpeg", "png", "webp"]
+    max_size: "10MB per image"
+    order: "First photo = cover image"
+
+# ============================================================================
+# ANALYTICS & TRACKING
+# ============================================================================
+
+analytics:
+  
+  property_metrics:
+    views: "Count of property detail page views"
+    saves: "Count of users who saved/favorited"
+    booking_requests: "Count of booking requests"
+    booking_conversion: "Confirmed bookings / booking requests"
+    occupancy_rate: "Booked nights / available nights"
+    average_nightly_rate: "Average across all bookings"
+    total_revenue: "Sum of all completed bookings"
+  
+  user_metrics:
+    owner:
+      - "Total properties listed"
+      - "Active bookings"
+      - "Completed bookings"
+      - "Total revenue"
+      - "Average response time"
+      - "Acceptance rate"
+      - "Average rating"
+    
+    guest:
+      - "Total bookings"
+      - "Completed bookings"
+      - "Average rating as guest"
+      - "Total spent"
+  
+  platform_metrics:
+    - "Total active properties"
+    - "Total bookings (by status)"
+    - "Total GMV (Gross Merchandise Value)"
+    - "Platform revenue"
+    - "User growth"
+    - "Booking conversion rate"
+
+# ============================================================================
+# SECURITY & FRAUD PREVENTION
+# ============================================================================
+
+security_rules:
+  
+  authentication:
+    password: "Min 8 characters, require uppercase, lowercase, number"
+    jwt: "Access token expires in 1 hour"
+    refresh: "Refresh token expires in 30 days"
+    storage: "Passwords hashed with bcrypt (cost factor 12)"
+  
+  authorization:
+    role_based: "User can be guest, owner, or both"
+    resource_based: "Can only modify own properties/bookings"
+    admin: "Special admin role (post-MVP)"
+  
+  payment_security:
+    pci_compliance: "Use Stripe - never store card details"
+    escrow: "Hold payment until check-in or confirmation"
+    refunds: "Automatic refund on cancellation per policy"
+  
+  fraud_prevention:
+    identity_verification: "Required for high-value transactions"
+    review_authenticity: "Only verified bookings can review"
+    duplicate_detection: "Flag multiple accounts from same device/IP"
+    rate_limiting: "API rate limits per user/IP"
+  
+  data_privacy:
+    gdpr_compliance: "Allow users to export/delete data"
+    pii_protection: "Hide sensitive info (full address until booking)"
+    payment_info: "Never log or expose full card details"
+
+# ============================================================================
+# PLATFORM FEES & PAYOUTS
+# ============================================================================
+
+financial_logic:
+  
+  platform_fees:
+    rental_booking:
+      guest_service_fee: "10% of base price"
+      owner_commission: "0% (fee from guest covers platform cost)"
+      calculation: "Charged to guest on top of listing price"
+    
+    property_sale:
+      commission: "2% of final sale price"
+      charged_to: "seller (property owner)"
+      timing: "Upon successful closing"
+  
+  payout_schedule:
+    rental:
+      timing: "24 hours after check-in"
+      amount: "base_price + cleaning_fee - platform_fee - payment_processor_fee"
+      deposit: "Held separately, released 48h after check-out"
+    
+    sale:
+      timing: "Upon closing confirmation"
+      amount: "sale_price - 2% platform fee"
+  
+  refund_logic:
+    automatic: "Trigger based on cancellation policy"
+    processing_time: "5-10 business days to original payment method"
+    partial_refunds: "Possible for cancellations within policy window"
+  
+  currency:
+    primary: "BAM (Bosnian Convertible Mark)"
+    conversion: "Support EUR display with real-time conversion (post-MVP)"
